@@ -1,0 +1,30 @@
+{
+  "kdf": "HKDF-SHA256",
+  "vectors": [
+    {
+      "name": "default_info_empty_salt",
+      "x25519_ss": "1111111111111111111111111111111111111111111111111111111111111111",
+      "mlkem768_ss": "2222222222222222222222222222222222222222222222222222222222222222",
+      "salt_hex": "",
+      "info_utf8": "sk_pqc/x25519-mlkem768/v1",
+      "expected": "27b3873917df86c97b9dae40d36efe79e0fee7a868599bf1f0ec8f342a181e87"
+    },
+    {
+      "name": "custom_salt_info",
+      "x25519_ss": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "mlkem768_ss": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "salt_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "info_utf8": "channel:test-42",
+      "expected": "9c96a8cfa7ae61e05796874046f9938bab5a9fbc30292a18a1a8a506e4013422"
+    },
+    {
+      "name": "rfc5869_tc1_hkdf_sha256_sanity",
+      "ikm_hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "salt_hex": "000102030405060708090a0b0c",
+      "info_hex": "f0f1f2f3f4f5f6f7f8f9",
+      "length": 42,
+      "expected_okm": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+      "note": "Pure HKDF-SHA256 KAT from RFC 5869 \u00a7A.1 \u2014 confirms the underlying KDF, independent of leg ordering."
+    }
+  ]
+}

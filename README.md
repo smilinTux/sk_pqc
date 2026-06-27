@@ -1,5 +1,12 @@
 # sk_pqc
 
+> ⚠️ **Experimental · pre-1.0 · NOT independently security-audited.** A clean-room
+> **reference implementation** — tested and cross-impl-parity-verified against our Python
+> (`sk-pqc`) and Rust (`sk-core`) builds, but with **no third-party security audit,
+> fuzzing, or formal review**. It binds vetted libraries (`liboqs`/ML-KEM,
+> `package:cryptography`, `@noble/post-quantum` on web); the original code is the wiring.
+> **Review it yourself before production use.**
+
 **sk_pqc is a Dart/Flutter library for hybrid post-quantum key encapsulation
 (KEM).** It lets a Dart or Flutter app establish a shared secret that stays
 secret even against a future quantum computer, by combining classical

@@ -1,0 +1,136 @@
+# CI for sk_pqc (Dart/Flutter hybrid PQ-KEM package).
+#
+# GATE (must pass): the pure-Dart suite — `dart pub get` + `dart analyze` +
+# `dart test`. The combiner + DM-ratchet tests carry real KAT assertions, so a
+# green run is a genuine pass, never green-on-skip. The native FFI / Node-noble
+# cross-backend tests self-skip cleanly when liboqs / node are absent (that is
+# how they pass on a bare runner) — they are EXCLUDED from the gate via `-x frb`
+# only for the flutter_rust_bridge parity suite, which is exercised separately.
+#
+# OPTIONAL (allow-failure): `native-frb` builds the sibling `sk-pqc-rs` core
+# (`--features dart`, Rust >= 1.85) + liboqs from source and runs the frb parity
+# + native-FFI suites. It is `continue-on-error` because it depends on a separate
+# repo and a heavy native toolchain; it informs but never blocks the gate.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- GATE: pure-Dart, fails loud ----------------------------------------
+  analyze-test:
+    name: analyze + test (Dart ${{ matrix.sdk }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.5.0 = the package's declared minimum (pubspec `sdk: ^3.5.0`);
+        # `stable` = current stable. Both must stay green.
+        sdk: ['3.5.0', 'stable']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Dart ${{ matrix.sdk }}
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.sdk }}
+
+      - name: dart pub get
+        run: dart pub get
+
+      - name: dart analyze (lints/recommended + strict-casts/raw-types)
+        run: dart analyze
+
+      - name: dart test (pure-Dart gate; frb parity excluded)
+        # Native-FFI + Node-noble tests self-skip when liboqs/node are absent.
+        # `-x frb` excludes only the Rust-core parity suite (run in native-frb).
+        run: dart test -x frb --reporter expanded
+
+  # ---- OPTIONAL: Rust-core (frb) + native liboqs parity, allow-failure -----
+  native-frb:
+    name: frb parity + native FFI (sk-pqc-rs + liboqs)
+    runs-on: ubuntu-latest
+    # Depends on a separate repo and a from-source native build: informative,
+    # never a merge blocker. Marked allow-failure, NOT green-on-skip — when it
+    # runs it asserts real Rust<->Dart byte-for-byte parity.
+    continue-on-error: true
+    env:
+      LIBOQS_VERSION: '0.12.0'
+    steps:
+      - name: Checkout sk-pqc-dart
+        uses: actions/checkout@v4
+        with:
+          path: sk-pqc-dart
+
+      - name: Checkout sk-pqc-rs (Rust core)
+        uses: actions/checkout@v4
+        with:
+          repository: smilinTux/sk-pqc-rs
+          path: sk-pqc-rs
+
+      - name: Install Rust >= 1.85 (matches sk-pqc-rs rust-version)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.85.0'
+          components: rustfmt, clippy
+
+      - name: Build liboqs ${{ env.LIBOQS_VERSION }} (ML-KEM-768) from source
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libssl-dev
+          git clone --depth 1 --branch "${LIBOQS_VERSION}" \
+            https://github.com/open-quantum-safe/liboqs.git /tmp/liboqs
+          cmake -S /tmp/liboqs -B /tmp/liboqs/build -GNinja \
+            -DBUILD_SHARED_LIBS=ON \
+            -DOQS_BUILD_ONLY_LIB=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build /tmp/liboqs/build
+          sudo cmake --install /tmp/liboqs/build
+          sudo ldconfig
+
+      - name: cargo fmt + clippy (sk-pqc-rs, default pure-Rust features)
+        working-directory: sk-pqc-rs
+        run: |
+          set -euxo pipefail
+          cargo fmt --all --check
+          cargo clippy --all-targets -- -D warnings
+
+      - name: Build sk-pqc-rs cdylib (--features dart)
+        working-directory: sk-pqc-rs
+        run: cargo build --release --features dart
+
+      - name: Set up Dart (stable)
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: dart pub get
+        working-directory: sk-pqc-dart
+        run: dart pub get
+
+      - name: frb parity + native-FFI suites
+        working-directory: sk-pqc-dart
+        env:
+          # The parity test looks for ../sk-pqc-rs/target/release/libsk_pqc.so by
+          # default; pass the absolute path explicitly to be checkout-layout proof.
+          SK_PQC_RS_LIB: ${{ github.workspace }}/sk-pqc-rs/target/release/libsk_pqc.so
+          LD_LIBRARY_PATH: /usr/local/lib
+        run: |
+          set -euxo pipefail
+          # frb parity suite (tag: frb) — Rust-via-frb == pure-Dart == pinned KAT.
+          dart test -t frb --reporter expanded
+          # Native liboqs FFI backend tests (untagged; would self-skip without
+          # liboqs — here liboqs IS installed, so they run for real).
+          dart test test/native_ffi_test.dart --reporter expanded

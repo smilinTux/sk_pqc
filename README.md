@@ -1,5 +1,6 @@
 # sk_pqc
 
+[![test](https://github.com/smilinTux/sk-pqc-dart/actions/workflows/test.yml/badge.svg)](https://github.com/smilinTux/sk-pqc-dart/actions/workflows/test.yml)
 [![pub package](https://img.shields.io/pub/v/sk_pqc.svg)](https://pub.dev/packages/sk_pqc)
 [![pub points](https://img.shields.io/pub/points/sk_pqc.svg)](https://pub.dev/packages/sk_pqc/score)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)

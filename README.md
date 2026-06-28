@@ -40,6 +40,58 @@ final ss   = await kem.decapsulate(enc.ciphertext, keys.privateKey); // == enc.s
 
 ---
 
+## Quickstart
+
+**Hybrid KEM** — establish a shared secret (confidential if EITHER X25519 OR
+ML-KEM-768 holds):
+
+```dart
+import 'package:sk_pqc/sk_pqc.dart';
+
+final kem = HybridKemImpl();                  // backend auto-selected (web/native)
+final recipient = await kem.generateKeyPair();        // publish recipient.publicKey
+final enc = await kem.encapsulate(recipient.publicKey); // enc.ciphertext + enc.sharedSecret
+final ss  = await kem.decapsulate(enc.ciphertext, recipient.privateKey);
+assert(ss.toString() == enc.sharedSecret.toString());   // same 32-byte secret
+```
+
+**1:1 DM epoch-ratchet bridge** — distribute one epoch secret over the hybrid KEM,
+then key many messages off it symmetrically (the ~1.1 KB ML-KEM ciphertext is paid
+once per epoch, not per message):
+
+```dart
+import 'package:sk_pqc/sk_pqc.dart';
+
+final bob = await kem.generateKeyPair();
+final e0  = newEpochSecret();
+final bobE0 = await unwrapDmEpochSecret(
+    await wrapDmEpochSecret(e0, bob.publicKey), bob.privateKey);
+
+final alice = DmRatchet(epoch: 0, epochSecret: e0);
+final bobR  = DmRatchet(epoch: 0, epochSecret: bobE0);
+
+final (idx, key) = await alice.nextOutboundKey();   // carry idx on the wire
+final recvKey = await bobR.messageKey(index: idx);  // index-addressable → reorder-tolerant
+assert(key.toString() == recvKey.toString());
+```
+
+### Runnable examples
+
+The [`example/`](example/) directory has self-contained programs (each `assert`s
+its own correctness):
+
+| File | What it shows |
+|---|---|
+| [`example/sk_pqc_example.dart`](example/sk_pqc_example.dart) | Hybrid KEM encap/decap roundtrip. |
+| [`example/dm_ratchet_bridge_example.dart`](example/dm_ratchet_bridge_example.dart) | Hybrid KEM **+** the DM-ratchet bridge two-party roundtrip (per-epoch KEM wrap, symmetric per-message AES-256-GCM, out-of-order delivery, post-compromise rekey). |
+
+```bash
+LD_LIBRARY_PATH=$HOME/.local/lib SK_PQC_LIBOQS=$HOME/.local/lib/liboqs.so \
+  dart run example/dm_ratchet_bridge_example.dart
+```
+
+---
+
 ## Architecture
 
 One Dart API (`HybridKem`) fans out to two audited ML-KEM backends chosen at
